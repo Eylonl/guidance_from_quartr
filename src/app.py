@@ -57,7 +57,7 @@ def main():
         with col2:
             end_year = st.number_input("End year", min_value=2000, max_value=2100, value=2024, step=1)
             end_q = st.selectbox("End quarter", ["Q1","Q2","Q3","Q4"], index=3)
-        headless = st.checkbox("Run headless", value=True, help="Uncheck to debug with a visible browser")
+        headless = st.checkbox("Run headless", value=True, help="Must be ON in Streamlit Cloud (no DISPLAY)")
         if st.button("Run backfill"):
             os.environ["HEADLESS"] = "1" if headless else "0"
             for t in [t.strip().upper() for t in tickers.split(",") if t.strip()]:

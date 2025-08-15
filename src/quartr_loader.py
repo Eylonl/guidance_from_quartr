@@ -11,6 +11,11 @@ PASSWORD = os.getenv("QUARTR_PASSWORD")
 HEADLESS = os.getenv("HEADLESS", "1") == "1"
 SLOW_MO_MS = int(os.getenv("SLOW_MO_MS", "0"))
 
+def is_cloud_headless():
+    # If no X server (no DISPLAY), force headless to avoid runtime crash on Streamlit Cloud
+    return not os.environ.get("DISPLAY")
+
+
 QMAP = {'Q1':1,'Q2':2,'Q3':3,'Q4':4}
 
 LABELS = [
@@ -76,7 +81,9 @@ def ensure_text_row_from_existing_pdf(ticker: str, year: int, quarter: str, ftyp
 
 def load_company_years(ticker: str, start_year: int, end_year: int, start_q: str = 'Q1', end_q: str = 'Q4'):
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=HEADLESS, slow_mo=SLOW_MO_MS)
+        args = ["--no-sandbox", "--disable-dev-shm-usage"]
+        headless_flag = True if is_cloud_headless() else HEADLESS
+        browser = p.chromium.launch(headless=headless_flag, slow_mo=SLOW_MO_MS, args=args)
         ctx = browser.new_context(accept_downloads=True)
         page = ctx.new_page()
         login(page)
