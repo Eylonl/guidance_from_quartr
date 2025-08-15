@@ -188,7 +188,7 @@ def preselect_index_for_key(k, items):
 st.subheader("Finalize & Download")
 
 
-        if st.button("Finalize & Download CSV"):
+if st.button("Finalize & Download CSV"):
             # Apply conflict choices: keep only the selected item per conflict key
             kept = []
             for k, items in merged_by_key.items():
