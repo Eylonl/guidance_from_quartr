@@ -1,3 +1,5 @@
+# Core Playwright/Chromium deps for Debian-based images
+libc6
 libnss3
 libatk1.0-0
 libatk-bridge2.0-0
@@ -13,4 +15,19 @@ libglib2.0-0
 libx11-6
 libxext6
 libxfixes3
-libc6
+# Missing ones from the error:
+libcups2
+libxkbcommon0
+# Extra commonly-needed for headless Chrome stability:
+libx11-xcb1
+libxcb1
+libxss1
+libgtk-3-0
+libdrm2
+libdbus-1-3
+libexpat1
+libjpeg62-turbo
+libpng16-16
+libxrender1
+fonts-liberation
+ca-certificates
