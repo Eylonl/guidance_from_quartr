@@ -53,15 +53,17 @@ def main():
         col1, col2 = st.columns(2)
         with col1:
             start_year = st.number_input("Start year", min_value=2000, max_value=2100, value=2023, step=1)
+            start_q = st.selectbox("Start quarter", ["Q1","Q2","Q3","Q4"], index=0)
         with col2:
             end_year = st.number_input("End year", min_value=2000, max_value=2100, value=2024, step=1)
+            end_q = st.selectbox("End quarter", ["Q1","Q2","Q3","Q4"], index=3)
         headless = st.checkbox("Run headless", value=True, help="Uncheck to debug with a visible browser")
         if st.button("Run backfill"):
             os.environ["HEADLESS"] = "1" if headless else "0"
             for t in [t.strip().upper() for t in tickers.split(",") if t.strip()]:
                 with st.spinner(f"Loading {t} {start_year}-{end_year}..."):
                     try:
-                        load_company_years(t, start_year, end_year)
+                        load_company_years(t, start_year, end_year, start_q, end_q)
                         st.success(f"Loaded {t}")
                     except Exception as e:
                         st.error(f"Failed {t}: {e}")
@@ -70,17 +72,45 @@ def main():
         st.subheader("Extract & Merge")
         tg = st.text_input("Ticker", "AAPL")
         mdl = st.text_input("OpenAI model", "gpt-4o-mini")
+        gc1, gc2 = st.columns(2)
+        with gc1:
+            g_start_year = st.number_input("Extract: Start year", min_value=2000, max_value=2100, value=2023, step=1)
+            g_start_q = st.selectbox("Extract: Start quarter", ["Q1","Q2","Q3","Q4"], index=0, key="g_start_q")
+        with gc2:
+            g_end_year = st.number_input("Extract: End year", min_value=2000, max_value=2100, value=2024, step=1)
+            g_end_q = st.selectbox("Extract: End quarter", ["Q1","Q2","Q3","Q4"], index=3, key="g_end_q")
         if st.button("Run extraction for ticker"):
             with st.spinner("Extracting guidance from press releases, presentations, and transcripts..."):
-                extract_for_ticker(tg.upper(), mdl)
+                extract_for_ticker(tg.upper(), mdl, g_start_year, g_end_year, g_start_q, g_end_q)
             st.success("Extraction completed.")
 
         st.divider()
         st.subheader("Build merged table")
         t = st.text_input("Ticker to view", "")
+        vc1, vc2 = st.columns(2)
+        with vc1:
+            v_start_year = st.number_input("View: Start year", min_value=2000, max_value=2100, value=2023, step=1)
+            v_start_q = st.selectbox("View: Start quarter", ["Q1","Q2","Q3","Q4"], index=0, key="v_start_q")
+        with vc2:
+            v_end_year = st.number_input("View: End year", min_value=2000, max_value=2100, value=2024, step=1)
+            v_end_q = st.selectbox("View: End quarter", ["Q1","Q2","Q3","Q4"], index=3, key="v_end_q")
         if st.button("Build merged view"):
             ticker = (t or tg).strip().upper()
             rows = fetch_rows(ticker, file_type="guidance_json", file_format="json")
+            # Filter guidance_json rows to selected view window
+            QMAP = {'Q1':1,'Q2':2,'Q3':3,'Q4':4}
+            frows = []
+            for r in rows:
+                y = r.get('year')
+                q = r.get('quarter')
+                if y is None or not q:
+                    continue
+                qn = QMAP.get(str(q).upper(), 0)
+                qn_start = QMAP[v_start_q] if y == v_start_year else 1
+                qn_end = QMAP[v_end_q] if y == v_end_year else 4
+                if v_start_year < y < v_end_year or (y == v_start_year and qn >= qn_start) or (y == v_end_year and qn <= qn_end):
+                    frows.append(r)
+            rows = frows
             by_src = {"press_release": [], "presentation": [], "transcript": []}
             for r in rows:
                 try:

@@ -11,6 +11,8 @@ PASSWORD = os.getenv("QUARTR_PASSWORD")
 HEADLESS = os.getenv("HEADLESS", "1") == "1"
 SLOW_MO_MS = int(os.getenv("SLOW_MO_MS", "0"))
 
+QMAP = {'Q1':1,'Q2':2,'Q3':3,'Q4':4}
+
 LABELS = [
     ("Transcript", "transcript"),
     ("Press Release", "press_release"),
@@ -72,7 +74,7 @@ def ensure_text_row_from_existing_pdf(ticker: str, year: int, quarter: str, ftyp
             text = pdf_bytes_to_text(pdf_bytes)
             upsert_row(ticker, year, quarter, ftype, "text", None, None, text)
 
-def load_company_years(ticker: str, start_year: int, end_year: int):
+def load_company_years(ticker: str, start_year: int, end_year: int, start_q: str = 'Q1', end_q: str = 'Q4'):
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=HEADLESS, slow_mo=SLOW_MO_MS)
         ctx = browser.new_context(accept_downloads=True)
@@ -81,7 +83,10 @@ def load_company_years(ticker: str, start_year: int, end_year: int):
         open_company(page, ticker)
 
         for year in range(start_year, end_year + 1):
-            for quarter in ["Q1", "Q2", "Q3", "Q4"]:
+            q_start = QMAP[start_q] if year == start_year else 1
+            q_end = QMAP[end_q] if year == end_year else 4
+            for qi in range(q_start, q_end + 1):
+                quarter = f"Q{qi}"
                 if not open_quarter(page, year, quarter):
                     print(f"[{ticker}] Skip: could not open {quarter} {year}")
                     continue

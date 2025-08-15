@@ -54,11 +54,27 @@ def call_openai(messages, model: str):
         return data
     return []
 
-def extract_for_ticker(ticker: str, model: Optional[str] = None):
+QMAP = {'Q1':1,'Q2':2,'Q3':3,'Q4':4}
+
+def extract_for_ticker(ticker: str, model: Optional[str] = None, start_year: Optional[int] = None, end_year: Optional[int] = None, start_q: str = 'Q1', end_q: str = 'Q4'):
     model = model or DEFAULT_MODEL
     sources = ["press_release", "presentation", "transcript"]
     for src in sources:
         rows = fetch_rows(ticker, file_type=src, file_format="text")
+        # Filter rows to selected year/quarter window if provided
+        if start_year is not None and end_year is not None:
+            frows = []
+            for r in rows:
+                y = r.get('year')
+                q = r.get('quarter')
+                if y is None or not q:
+                    continue
+                qn = QMAP.get(str(q).upper(), 0)
+                qn_start = QMAP[start_q] if y == start_year else 1
+                qn_end = QMAP[end_q] if y == end_year else 4
+                if start_year < y < end_year or (y == start_year and qn >= qn_start) or (y == end_year and qn <= qn_end):
+                    frows.append(r)
+            rows = frows
         if not rows:
             continue
         for r in rows:
