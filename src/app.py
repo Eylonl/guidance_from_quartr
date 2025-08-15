@@ -226,7 +226,7 @@ final_df = pd.DataFrame(final_rows, columns=[
                 "Metric","Value of guide","Period","Period type",
                 "Low end of guidance","High end of guidance","Average","Filing date"
             ])
-            if final_df.empty:
+    if final_df.empty:
                 st.info("Nothing to export. Try extracting guidance first.")
             else:
                 st.dataframe(final_df, use_container_width=True)
