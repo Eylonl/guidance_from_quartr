@@ -26,20 +26,32 @@ def _inject_secrets_to_env():
                 os.environ[key] = val
 
 def ensure_playwright():
+    import os, sys, subprocess, pathlib
+    # Use a stable browsers path in Streamlit Cloud
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/home/appuser/.cache/ms-playwright")
+    chromium_dir = pathlib.Path(os.environ["PLAYWRIGHT_BROWSERS_PATH"]) / "chromium"
+    # If the chromium executable is missing, (re)install
     try:
-        from playwright.sync_api import sync_playwright  # noqa: F401
+        need_install = True
+        if chromium_dir.exists():
+            # quick presence check for headless_shell/chrome
+            matches = list(chromium_dir.rglob("headless_shell")) + list(chromium_dir.rglob("chrome"))
+            need_install = len(matches) == 0
+        if need_install:
+            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
         return True
-    except Exception:
+    except Exception as e:
+        # Last-ditch: try with deps (no-op on Streamlit if already present)
         try:
-            import subprocess
-            import sys
             subprocess.run([sys.executable, "-m", "playwright", "install", "chromium", "--with-deps"], check=True)
             return True
-        except Exception as e:
-            st.warning(f"Playwright install may be incomplete: {e}")
+        except Exception as e2:
+            import streamlit as st
+            st.error(f"Playwright installation failed: {e2}")
             return False
 
-def main():
+def main(
+):
     _inject_secrets_to_env()
     st.set_page_config(page_title="Earnings Guidance Extractor (Supabase)", layout="wide")
     st.title("📈 Earnings Guidance Extractor — Supabase storage (organized & idempotent)")

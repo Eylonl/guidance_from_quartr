@@ -6,6 +6,17 @@ from .cloud_store import path_for, file_exists, upload_pdf, upsert_row, fetch_ro
 
 load_dotenv()
 
+def ensure_browsers():
+    import os, sys, subprocess, pathlib
+    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", "/home/appuser/.cache/ms-playwright")
+    chromium_dir = pathlib.Path(os.environ["PLAYWRIGHT_BROWSERS_PATH"]) / "chromium"
+    need_install = True
+    if chromium_dir.exists():
+        matches = list(chromium_dir.rglob("headless_shell")) + list(chromium_dir.rglob("chrome"))
+        need_install = len(matches) == 0
+    if need_install:
+        subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+
 EMAIL = os.getenv("QUARTR_EMAIL")
 PASSWORD = os.getenv("QUARTR_PASSWORD")
 HEADLESS = os.getenv("HEADLESS", "1") == "1"
@@ -75,6 +86,7 @@ def ensure_text_row_from_existing_pdf(ticker: str, year: int, quarter: str, ftyp
             upsert_row(ticker, year, quarter, ftype, "text", None, None, text)
 
 def load_company_years(ticker: str, start_year: int, end_year: int, start_q: str = 'Q1', end_q: str = 'Q4'):
+    ensure_browsers()
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=HEADLESS, slow_mo=SLOW_MO_MS)
         ctx = browser.new_context(accept_downloads=True)
