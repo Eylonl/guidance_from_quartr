@@ -1,5 +1,4 @@
 import os
-from typing import Tuple
 from dotenv import load_dotenv
 from playwright.sync_api import sync_playwright, TimeoutError as PWTimeoutError
 import fitz  # PyMuPDF
@@ -62,9 +61,8 @@ def download_label(page, label_text: str):
         return None, None
 
 def ensure_text_row_from_existing_pdf(ticker: str, year: int, quarter: str, ftype: str):
-    # If PDF exists in bucket but text row missing, download PDF and extract text once
     rows = fetch_rows(ticker, file_type=ftype, file_format="text")
-    has_text = any(r["year"]==year and r["quarter"]==quarter for r in rows)
+    has_text = any(r["year"] == year and r["quarter"] == quarter for r in rows)
     if has_text:
         return
     key = path_for(ticker, year, quarter, ftype)
@@ -97,9 +95,7 @@ def load_company_years(ticker: str, start_year: int, end_year: int):
                     if not b:
                         print(f"[{ticker}] {quarter} {year} — {label}: not available")
                         continue
-                    # Upload PDF and record row
                     key = upload_pdf(ticker, year, quarter, ftype, b)
-                    # Extract text and upsert row
                     text = pdf_bytes_to_text(b)
                     upsert_row(ticker, year, quarter, ftype, "pdf", key, url or None, None)
                     upsert_row(ticker, year, quarter, ftype, "text", None, url or None, text)

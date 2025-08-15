@@ -2,8 +2,7 @@ import re
 from typing import List, Dict, Any
 
 GUIDANCE_RGX = re.compile(
-    r"(guidance|outlook|forecast|expect|expects|we\s+expect|we\s+forecast|"
-    r"full\s+year|FY\d{2,4}|Q[1-4]\s*(?:FY)?\d{2,4}|quarterly\s+outlook)",
+    r"(guidance|outlook|forecast|expect|expects|we\s+expect|we\s+forecast|full\s+year|FY\d{2,4}|Q[1-4]\s*(?:FY)?\d{2,4}|quarterly\s+outlook)",
     re.I,
 )
 NUMBER_SPAN = re.compile(
@@ -46,15 +45,22 @@ def normalize_value_span(s: str):
     def as_num(x):
         x = x.replace("about", "").replace("approx", "").replace("$", "").strip()
         mult = 1.0
-        if "billion" in x or "bn" in x: mult = 1e9
-        elif "million" in x or re.search(r"\bm\b", x): mult = 1e6
-        x = re.sub(r"[^\d.]", "", x)
-        return float(x) * mult if x else None
+        x_clean = re.sub(r"[^\d.]", "", x)
+        return float(x_clean) if x_clean else None
     if len(rng) == 2:
         low, high = as_num(rng[0]), as_num(rng[1])
     else:
         low = as_num(t)
         high = None
+    if units == "USD":
+        if low is not None and ("billion" in t or "bn" in t):
+            low *= 1e9
+        if high is not None and ("billion" in t or "bn" in t):
+            high *= 1e9
+        if low is not None and ("million" in t or re.search(r"\bm\b", t)):
+            low *= 1e6
+        if high is not None and ("million" in t or re.search(r"\bm\b", t)):
+            high *= 1e6
     return units, low, high
 
 def split_paragraphs(text: str) -> List[str]:

@@ -1,213 +1,87 @@
 
-Guidance from Quartr — Supabase + Conflict Viewer
-==================================================
+Guidance from Quartr — Supabase + Conflict Viewer (Setup Guide)
+===============================================================
 
-This guide shows EXACTLY how to set up, deploy, and use the app that:
-- Logs into Quartr Core via Playwright
-- Downloads press releases, presentations, and transcripts (idempotent)
-- Stores PDFs in Supabase Storage and text/metadata in a Supabase table
-- Extracts guidance via a token-efficient pipeline
-- Aggregates across all sources, lets you RESOLVE conflicts in-app, and exports CSV
+0) Prereqs
+- Quartr login (email/password)
+- OpenAI API key
+- Supabase project
 
-----------------------------------
-0) What you need before you start
-----------------------------------
-• A Quartr Core account (email + password)
-• An OpenAI API key
-• A Supabase project (free tier is fine)
+1) Supabase setup (SQL)
+In Supabase → SQL Editor, run:
+---------------------------------------------------
+create table if not exists earnings_files (
+  id bigserial primary key,
+  ticker text not null,
+  year int not null,
+  quarter text not null,          -- 'Q1'..'Q4'
+  file_type text not null,        -- 'press_release' | 'presentation' | 'transcript' | 'guidance_json'
+  file_format text not null,      -- 'pdf' | 'text' | 'json'
+  storage_path text,              -- e.g., 'pdfs/AAPL/2025-Q2/press_release.pdf'
+  source_url text,
+  text_content text,              -- extracted text or JSON text
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique (ticker, year, quarter, file_type, file_format)
+);
+create index if not exists ix_lookup on earnings_files(ticker, file_type, file_format, year desc, quarter);
+---------------------------------------------------
 
-----------------------------------
-1) Supabase setup (ONE TIME)
-----------------------------------
-1. Create a Supabase project at https://supabase.com
-2. Create a Storage bucket named: earnings
-3. In the SQL Editor, run:
-   ---------------------------------------------------
-   create table if not exists earnings_files (
-     id bigserial primary key,
-     ticker text not null,
-     year int not null,
-     quarter text not null,          -- 'Q1'..'Q4'
-     file_type text not null,        -- 'press_release' | 'presentation' | 'transcript' | 'guidance_json'
-     file_format text not null,      -- 'pdf' | 'text' | 'json'
-     storage_path text,              -- e.g., 'pdfs/AAPL/2025-Q2/press_release.pdf'
-     source_url text,
-     text_content text,              -- extracted text or JSON text
-     created_at timestamptz default now(),
-     updated_at timestamptz default now(),
-     unique (ticker, year, quarter, file_type, file_format)
-   );
-   create index if not exists ix_lookup on earnings_files(ticker, file_type, file_format, year desc, quarter);
-   ---------------------------------------------------
-
-• Note your Supabase "Project URL" and "anon key" (Settings → API).
-
-
-----------------------------------
-2) Deploy on Streamlit Cloud
-----------------------------------
-A) Push the ZIP contents to a GitHub repo
-   1. Unzip locally
-   2. In the unzipped folder (where streamlit_app.py lives), run:
-      ---------------------------------------------------
-      git init
-      git add .
-      git commit -m "Supabase Quartr app with conflict viewer"
-      git branch -M main
-      git remote add origin https://github.com/<you>/guidance_from_quartr.git
-      git push -u origin main
-      ---------------------------------------------------
-
-B) Create a new Streamlit Cloud app
-   • Go to https://share.streamlit.io
-   • New app → choose your repo
-   • Branch: main
-   • File path: streamlit_app.py
-
-C) Add Streamlit Secrets (App → Settings → Secrets)
-   ---------------------------------------------------
-   QUARTR_EMAIL="you@example.com"
-   QUARTR_PASSWORD="yourpassword"
-   OPENAI_API_KEY="sk-..."
-   SUPABASE_URL="https://<your-project>.supabase.co"
-   SUPABASE_ANON_KEY="<your-anon-key>"
-   SUPABASE_BUCKET="earnings"
-   HEADLESS="1"
-   SLOW_MO_MS="150"
-   ---------------------------------------------------
-
-Notes:
-• HEADLESS="1" is recommended on Streamlit Cloud. If debugging locally, set "0".
-• On first run, the app auto-installs Playwright Chromium if needed. If you see a warning,
-  just re-run Backfill once the install finishes.
-
-
-----------------------------------
-3) How storage and idempotency work
-----------------------------------
-• PDFs are saved to Supabase Storage at:
-  pdfs/{TICKER}/{YEAR}-{QUARTER}/{file_type}.pdf
-  (example: pdfs/AAPL/2025-Q2/press_release.pdf)
-
-• Before downloading, the loader checks if that key already exists.
-  - If YES, it SKIPS the browser download for that file_type/quarter.
-  - If text is missing, it downloads the stored PDF one time to extract text.
-
-• The Supabase table 'earnings_files' stores:
-  - One row for the PDF (file_format='pdf', storage_path set)
-  - One row for the extracted text (file_format='text', text_content set)
-  - One row per guidance extraction (file_type='guidance_json', file_format='json', text_content holds JSON)
-
-
-----------------------------------
-4) Daily use — step-by-step
-----------------------------------
-1. Load data (tab 1)
-   • Enter tickers (comma-separated) and year range
-   • Click "Run backfill"
-   • The loader logs into Quartr, navigates to each quarter, and downloads:
-     - Press Release, Presentation, Transcript (PDF + extracted text)
-     - Skips any PDF that already exists in Supabase
-
-2. Extract & Merge (tab 2)
-   • Enter a ticker, choose the OpenAI model (default: gpt-4o-mini)
-   • Click "Run extraction for ticker"
-     - The app runs prefilter + candidate mining (free), then a small LLM call (cheap)
-     - Saves structured guidance JSON for each source (release/deck/transcript)
-   • Click "Build merged view" to aggregate & de-duplicate
-
-3. Resolve conflicts (tab 2)
-   • If press release vs. deck vs. transcript disagree, you’ll see conflict groups.
-   • For each group (same metric & period), choose the correct line via radio buttons.
-   • When ready, press "Finalize & Download CSV".
-
-4. Final export
-   • You’ll get a table and a CSV download with columns:
-     Metric | Value of guide | Period | Period type | Low end of guidance | High end of guidance | Average | Filing date
-
-
-----------------------------------
-5) Troubleshooting
-----------------------------------
-• Playwright or Chromium errors:
-  - The app attempts to install Chromium on first run. If it warns, wait, then click backfill again.
-  - Ensure 'apt.txt' is present in the repo (it is) for Streamlit Cloud to install headless dependencies.
-
-• Supabase permissions:
-  - Ensure the 'earnings' bucket allows uploads with the anon key OR use a service key via secrets.
-  - Check that the SQL migration ran and the unique constraint is present.
-
-• Empty results:
-  - Some quarters may not have all three assets in Quartr. The loader skips gracefully.
-  - Guidance may only appear in press release (common) or slide deck/transcript (less common).
-
-• Token cost:
-  - The pipeline only sends compact candidate JSON to the model, not full PDFs.
-  - If you still see high usage, tighten regexes in src/prefilter.py.
-
-
-----------------------------------
-6) Local development (optional)
-----------------------------------
-• Create a virtualenv and install deps:
-  ---------------------------------------------------
-  python -m venv .venv
-  # macOS/Linux
-  source .venv/bin/activate
-  # Windows (PowerShell)
-  .venv\Scripts\Activate.ps1
-
-  pip install -r requirements.txt
-  python -m playwright install chromium
-  # Linux only if needed:
-  # python -m playwright install-deps
-  ---------------------------------------------------
-• Create a .env (or use Streamlit Secrets locally):
-  ---------------------------------------------------
-  QUARTR_EMAIL=you@example.com
-  QUARTR_PASSWORD=yourpassword
-  OPENAI_API_KEY=sk-...
-  SUPABASE_URL=https://<your-project>.supabase.co
-  SUPABASE_ANON_KEY=...
-  SUPABASE_BUCKET=earnings
-  HEADLESS=0
-  SLOW_MO_MS=200
-  ---------------------------------------------------
-
-
-----------------------------------
-7) File overview
-----------------------------------
-• streamlit_app.py          – entry point for Streamlit Cloud
-• src/cloud_store.py        – Supabase storage + table helpers
-• src/quartr_loader.py      – Playwright automation + idempotent checks
-• src/prefilter.py          – regex prefilter + candidate miner (free)
-• src/guidance.py           – thin LLM structuring (cheap)
-• src/merge.py              – aggregation, tolerance, conflict detection
-• src/app.py                – Streamlit UI (backfill, extract, merge, resolve, export)
-• apt.txt                   – headless Chromium libs for Streamlit Cloud
-• requirements.txt          – dependencies
-• SETUP_INSTRUCTIONS.txt    – this guide
-
-You're ready to go. Enjoy!
-
-
-----------------------------------
-8) (Optional but recommended) Save conflict resolutions
-----------------------------------
-To persist your in‑app conflict choices (so they auto‑apply next time), run this SQL in Supabase:
+(Optional) Persist conflict choices:
 ---------------------------------------------------
 create table if not exists guidance_resolved (
   id bigserial primary key,
   ticker text not null,
   year int not null,
   quarter text not null,
-  metric_key text not null,            -- canonical key: metric|period_type|FY|Q
-  chosen_json text not null,           -- JSON of the chosen item
+  metric_key text not null,
+  chosen_json text not null,
   created_at timestamptz default now(),
   updated_at timestamptz default now(),
   unique (ticker, year, quarter, metric_key)
 );
 create index if not exists ix_resolved on guidance_resolved(ticker, year desc, quarter);
 ---------------------------------------------------
-(The app will read/write to this table automatically if it exists.)
+
+2) Storage rules (Option A: anon writes limited to our prefix)
+In SQL Editor:
+---------------------------------------------------
+create policy "public read earnings"
+on storage.objects for select
+to public
+using (bucket_id = 'earnings');
+
+create policy "anon insert earnings"
+on storage.objects for insert
+to anon
+with check (bucket_id = 'earnings' and name like 'pdfs/%');
+
+create policy "anon update earnings"
+on storage.objects for update
+to anon
+using (bucket_id = 'earnings')
+with check (bucket_id = 'earnings');
+---------------------------------------------------
+
+3) Streamlit Cloud → Secrets
+---------------------------------------------------
+QUARTR_EMAIL="you@example.com"
+QUARTR_PASSWORD="yourpassword"
+OPENAI_API_KEY="sk-..."
+SUPABASE_URL="https://<your-project>.supabase.co"
+SUPABASE_ANON_KEY="<your-anon-key>"
+SUPABASE_BUCKET="earnings"
+HEADLESS="1"
+SLOW_MO_MS="150"
+---------------------------------------------------
+
+4) Deploy (GitHub → Streamlit)
+- Push all files/folders to a new GitHub repo
+- On share.streamlit.io → New app
+  • Repo: your repo
+  • Branch: main
+  • Main file: streamlit_app.py
+
+5) Use
+- Load Data tab: Backfill (idempotent; organizes PDFs under pdfs/TICKER/YEAR-QUARTER/)
+- Guidance tab: Run extraction → Build merged view → Resolve conflicts → Finalize & Download CSV

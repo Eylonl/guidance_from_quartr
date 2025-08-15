@@ -1,4 +1,4 @@
-import os, io
+import os
 from typing import Optional, List, Dict, Any
 from supabase import create_client, Client
 
@@ -9,13 +9,11 @@ BUCKET = os.getenv("SUPABASE_BUCKET", "earnings")
 sb: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def path_for(ticker: str, year: int, quarter: str, file_type: str) -> str:
-    # Organized by ticker & year-quarter
     return f"pdfs/{ticker.upper()}/{year}-{quarter}/{file_type}.pdf"
 
 def file_exists(storage_path: str) -> bool:
     if not storage_path:
         return False
-    # List the parent folder and check for file name
     parent, name = storage_path.rsplit("/", 1)
     try:
         entries = sb.storage.from_(BUCKET).list(path=parent)
@@ -25,7 +23,6 @@ def file_exists(storage_path: str) -> bool:
 
 def upload_pdf(ticker: str, year: int, quarter: str, file_type: str, pdf_bytes: bytes) -> str:
     key = path_for(ticker, year, quarter, file_type)
-    # Upsert=true so re-uploads replace if needed
     sb.storage.from_(BUCKET).upload(key, pdf_bytes, {"content-type": "application/pdf", "upsert": True})
     return key
 
@@ -52,20 +49,20 @@ def upsert_row(ticker: str, year: int, quarter: str,
 
 def fetch_rows(ticker: str, file_type: Optional[str] = None, file_format: Optional[str] = None) -> List[Dict[str, Any]]:
     q = sb.table("earnings_files").select("*").eq("ticker", ticker.upper())
-    if file_type: q = q.eq("file_type", file_type)
-    if file_format: q = q.eq("file_format", file_format)
+    if file_type:
+        q = q.eq("file_type", file_type)
+    if file_format:
+        q = q.eq("file_format", file_format)
     q = q.order("year", desc=True).order("quarter", desc=True)
     return q.execute().data
 
-
-# ---------- Conflict resolution persistence ----------
-def make_metric_key(metric: str, period_type: str, fy: str|None, q: str|None) -> str:
+# Conflict resolution persistence
+def make_metric_key(metric: str, period_type: str, fy: Optional[str], q: Optional[str]) -> str:
     m = (metric or "").strip().lower()
     pt = (period_type or "").strip().lower()
     return f"{m}|{pt}|{fy or ''}|{q or ''}"
 
 def save_resolution(ticker: str, year: int, quarter: str, metric_key: str, chosen_json_text: str):
-    # upsert
     sb.table("guidance_resolved").upsert({
         "ticker": ticker.upper(),
         "year": year,
@@ -74,7 +71,7 @@ def save_resolution(ticker: str, year: int, quarter: str, metric_key: str, chose
         "chosen_json": chosen_json_text
     }, on_conflict="ticker,year,quarter,metric_key").execute()
 
-def fetch_resolutions(ticker: str, year: int|None = None, quarter: str|None = None):
+def fetch_resolutions(ticker: str, year: Optional[int] = None, quarter: Optional[str] = None):
     q = sb.table("guidance_resolved").select("*").eq("ticker", ticker.upper())
     if year is not None:
         q = q.eq("year", year)

@@ -7,6 +7,7 @@ from .cloud_store import fetch_rows, upsert_row
 from .prefilter import mine_candidates
 
 load_dotenv()
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 DEFAULT_MODEL = "gpt-4o-mini"
 
@@ -25,18 +26,25 @@ Discard any candidate that is not forward-looking guidance. Use the short 'conte
 
 def try_iso_date_from_text(text: str) -> Optional[str]:
     m = re.search(r'(January|February|March|April|May|June|July|August|September|October|November|December)\s+([12]?\d|3[01]),\s+(20\d{2})', text)
-    if not m: return None
-    month_map = {m:i for i,m in enumerate(["January","February","March","April","May","June","July","August","September","October","November","December"], start=1)}
+    if not m:
+        return None
+    month_map = {m: i for i, m in enumerate([
+        "January","February","March","April","May","June",
+        "July","August","September","October","November","December"
+    ], start=1)}
     month = month_map[m.group(1)]
-    day = int(m.group(2)); year = int(m.group(3))
+    day = int(m.group(2))
+    year = int(m.group(3))
     return f"{year:04d}-{month:02d}-{day:02d}"
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=30), stop=stop_after_attempt(5))
 def call_openai(messages, model: str):
     client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else OpenAI()
     resp = client.chat.completions.create(
-        model=model, temperature=0, messages=messages,
-        response_format={"type":"json_object"},
+        model=model,
+        temperature=0,
+        messages=messages,
+        response_format={"type": "json_object"},
     )
     txt = resp.choices[0].message.content.strip()
     data = json.loads(txt)
@@ -57,14 +65,16 @@ def extract_for_ticker(ticker: str, model: Optional[str] = None):
             text = r.get("text_content") or ""
             if not text.strip():
                 continue
-            year, quarter, url = r["year"], r["quarter"], r.get("source_url")
+            year = r["year"]
+            quarter = r["quarter"]
+            url = r.get("source_url")
             filing_date = try_iso_date_from_text(text[:2000])
             candidates = mine_candidates(text)
             if not candidates:
                 continue
             messages = [
-                {"role":"system","content":SYSTEM},
-                {"role":"user","content":json.dumps({"candidates": candidates})}
+                {"role": "system", "content": SYSTEM},
+                {"role": "user", "content": json.dumps({"candidates": candidates})},
             ]
             items = call_openai(messages, model=model)
             for it in items:
